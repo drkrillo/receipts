@@ -1,0 +1,56 @@
+[project]
+name = "receipts"
+version = "0.1.0"
+description = "Code license provenance & lineage forensics — show the receipts, not verdicts."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "drkrillo" }]
+keywords = ["license", "provenance", "forensics", "git", "spdx", "compliance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+
+# git is required too, and pip cannot install it: it is invoked as a subprocess.
+# On macOS ScanCode also needs libmagic — `brew install libmagic`.
+# Analysis runs offline; only `trace` and `preserve` reach the network, and they
+# use urllib from the standard library.
+dependencies = [
+    "scancode-toolkit>=32.0,<33.0",
+    "license-expression>=30.0,<31.0",
+    "Pygments>=2.17,<3.0",
+]
+
+[project.optional-dependencies]
+# pip install -e ".[dev]" — on top of the runtime dependencies, not instead of
+# them: the tests exercise the real ScanCode index and the real fingerprinter.
+dev = ["pytest>=8.0,<9.0", "pytest-cov>=5.0,<7.0", "ruff>=0.6,<1.0"]
+
+[project.urls]
+Homepage = "https://github.com/drkrillo/receipts"
+
+[project.scripts]
+receipts = "receipts.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["receipts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+# `-m "not slow"` skips the end-to-end runs, the only ones that call ScanCode.
+markers = ["slow: runs the real ScanCode, seconds not milliseconds"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py310"
