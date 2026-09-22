@@ -193,8 +193,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ----- per-capability commands -------------------------------------------
     # The pipeline is separable, so the CLI exposes it that way: a researcher can
-    # study one layer at a time, and `overlap` --- the only validated capability
-    # --- runs on git alone, in seconds, with no ScanCode.
+    # study one layer at a time, and `overlap`, the only capability that is
+    # exact rather than scored, runs on git alone in seconds with no ScanCode.
     po = sub.add_parser(
         "overlap", parents=[g],
         help="derivation only: shared objects and the divergence anchor (no ScanCode)",
@@ -266,13 +266,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     pp = sub.add_parser(
         "preserve", parents=[g],
-        help="check (and optionally request) archival in Software Heritage",
+        help="check archival in Software Heritage (read-only)",
         description=(
             "Checks each repository against the Software Heritage archive\n"
             "(archive.softwareheritage.org), the public long-term archive of\n"
-            "source code, and can ask it to save the ones that are missing.\n\n"
+            "source code, and reports what it already holds.\n\n"
             "Repositories vanish, and they vanish precisely when someone moves\n"
-            "to act on them --- four in this project's case set are gone. An\n"
+            "to act on them: four in this project's case set are gone. An\n"
             "evidence package cites commit ids, and once the repository is gone\n"
             "nobody can resolve them.\n\n"
             "Pass every repository in the analysis. The one that matters most is\n"
@@ -298,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     _setup_logging(args.verbose, args.quiet)
     try:
         # ScanCode is required only by the commands that read licences. The
-        # one capability that is actually validated --- derivation --- needs
+        # one capability that is exact rather than scored, derivation, needs
         # nothing but git, and gating it behind a 300 MB dependency that also
         # wants libmagic and is untested on Windows and Linux made the strongest
         # part of the tool the hardest to run.
