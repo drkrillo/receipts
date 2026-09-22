@@ -17,14 +17,26 @@ Seven sets have been run this way.
 
 | capability | result | measured on |
 |---|---|---|
-| Derivation (did code move) | precision 1.00, recall 1.00 | seven sets, correct in every case |
-| Licence at the divergence point | 0.47 → 0.67, then 6/6, then 3/4 | improved after the selection bug; the one failure in set #7 is below |
+| Derivation (did code move) | correct on every pair | seven sets |
+| Licence at the divergence point | 6 of 6 in set #6, 3 of 4 in set #7 | the one failure is below; earlier sets are not comparable, see the note |
+
+Derivation is reported as a count, not as precision and recall, because it is not
+a classifier. `overlap` intersects git object ids: two repositories share a
+commit or a blob hash or they do not, with no score and no threshold to tune.
+There is also no set of true negatives to measure precision against. The one
+pair declared as an expected negative, nginx → freenginx, turned out to be a
+positive, which is recorded below.
 
 The numbers for sets #1–#6 predate the changes set #7 caused and have not been
 re-measured against them. They are a record of what was true when they were
 taken, not a claim about the tool today.
 
-## Set #7 — four pairs, declared 2026-08-09 before any clone
+Set #7 is also the only one whose declaration was written down and dated before
+the clone: [notes/HELDOUT-7.md](notes/HELDOUT-7.md), 2026-08-09. The earlier sets
+followed the same rule, but their declarations were not kept, so #7 is the only
+one where that can be checked rather than taken on my word.
+
+## Set #7 — four pairs, [declared](notes/HELDOUT-7.md) 2026-08-09 before any clone
 
 Chosen for three shapes the first six sets never contained, and one case
 expected to fail in a specific way.

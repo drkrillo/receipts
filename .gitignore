@@ -3,7 +3,8 @@
 __pycache__/
 *.pyc
 receipts-evidence-*/
-notes/
+notes/*
+!notes/HELDOUT-7.md
 .DS_Store
 *.egg-info/
 scripts/
@@ -11,3 +12,6 @@ scripts/
 htmlcov/
 .pytest_cache/
 .ruff_cache/
+build/
+*.spdx.json
+*.cdx.json
