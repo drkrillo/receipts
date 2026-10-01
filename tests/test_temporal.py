@@ -7,6 +7,8 @@ and the evidence are the same object.
 
 from __future__ import annotations
 
+import pytest
+
 from receipts import gitobjects as git
 from receipts import overlap as ov
 from receipts import timeline as tl
@@ -330,3 +332,34 @@ def test_the_anchor_ignores_upstream_commits_the_fork_only_stores(repo, tmp_path
     eras = ov.shared_by_licence_era(repo.path, on_line, tl.timeline(repo.path))
     assert "proprietary-license" not in [e["licence"] for e in eras]
     assert [(e["licence"], e["commits"]) for e in eras] == [("NONE", 1), ("MIT", 2)]
+
+
+_MIT_HEADER = """// Copyright (c) 2015 {holder}
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software").
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+
+export const {name} = 1;
+"""
+
+
+@pytest.mark.slow
+def test_a_replaced_holder_is_caught_when_the_mit_text_survives(repo, tmp_path):
+    """The fork keeps the MIT text and swaps the name above it.
+
+    Matching lines that contain "copyright" took "The above copyright notice..."
+    as the notice, found it on both sides, and reported every header as intact.
+    """
+    names = ("a", "b", "c")
+    repo.commit("upstream", {f"{n}.js": _MIT_HEADER.format(holder="Alice Smith", name=n)
+                             for n in names})
+    fork = clone(repo, tmp_path / "fork")
+    fork.commit("rebrand", {f"{n}.js": _MIT_HEADER.format(holder="Bob Corp", name=n)
+                            for n in names})
+
+    compared, replaced, dropped, _, changed = ov.header_diff(repo.path, fork.path)
+
+    assert (compared, replaced, dropped) == (3, 3, 0)
+    assert sorted(changed) == ["a.js", "b.js", "c.js"]

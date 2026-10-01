@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import functools
 import logging
 import os
 import re
@@ -410,12 +411,29 @@ def project_holders(repo: str, commit: str | None = None) -> list[str]:
 
 
 def _copyright_lines(text: str) -> list[str]:
-    out = []
-    for line in text.splitlines()[:40]:
-        low = line.lower()
-        if "copyright" in low or "\u00a9" in line:
-            out.append(line.strip(" /*#-\t"))
-    return out
+    """Copyright statements in the first 40 lines, as ScanCode reads them.
+
+    Matching any line that contains the word was not enough. An MIT header also
+    says "The above copyright notice and this permission notice shall be
+    included", and that line, identical on both sides, read as the notice
+    surviving after the holder in the line above it had been replaced.
+    """
+    head = "\n".join(text.splitlines()[:40])
+    low = head.lower()
+    if "copyright" not in low and "(c)" not in low and "\u00a9" not in head:
+        return []
+    return list(_copyright_statements(head))
+
+
+@functools.lru_cache(maxsize=4096)
+def _copyright_statements(head: str) -> tuple[str, ...]:
+    # Imported here so that `overlap`, which needs nothing but git, still runs
+    # without ScanCode installed.
+    from cluecode.copyrights import detect_copyrights_from_lines
+    lines = list(enumerate(head.splitlines(), 1))
+    return tuple(d.copyright for d in detect_copyrights_from_lines(
+        lines, include_copyrights=True, include_holders=False,
+        include_authors=False))
 
 
 def _notice_years(text: str) -> tuple[str, ...]:
