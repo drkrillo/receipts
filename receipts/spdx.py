@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import os
 import re
 
 NONE = "NONE"
@@ -59,76 +58,51 @@ _CATEGORY_ORDER = (
 
 
 @functools.lru_cache(maxsize=1)
-def _category_index() -> dict[str, str]:
-    """{licence id (lowercased): ScanCode category} for every licence it knows."""
+def _licence_db() -> dict:
+    """ScanCode's own licence database, {key: License}."""
     try:
-        import licensedcode
-        root = os.path.join(os.path.dirname(licensedcode.__file__),
-                            "data", "licenses")
-        names = os.listdir(root)
+        from licensedcode.cache import get_licenses_db
+        return get_licenses_db()
     except Exception as exc:                        # pragma: no cover
-        logger.warning("ScanCode licence categories unavailable (%s); every "
+        logger.warning("ScanCode licence data unavailable (%s); every "
                        "licence will rank as most restrictive", exc)
         return {}
 
-    index: dict[str, str] = {}
-    for name in names:
-        if not name.endswith(".LICENSE"):
+
+@functools.lru_cache(maxsize=1)
+def _category_index() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """({SPDX id: category}, {lowercased SPDX id: category}, {ScanCode key: category}).
+
+    SPDX ids and ScanCode keys are kept apart because they collide once
+    lowercased: `bsl-1.0` is ScanCode's key for the Business Source License 1.0
+    (Source-available) and `BSL-1.0` is SPDX's id for Boost (Permissive). This
+    was one map built by reading the `.LICENSE` files line by line, first file
+    wins, and it gave nine licences the wrong category, `proprietary-license`
+    read as Permissive among them.
+    """
+    spdx: dict[str, str] = {}
+    keys: dict[str, str] = {}
+    for key, lic in _licence_db().items():
+        if not lic.category:
             continue
-        category, ids = "", []
-        try:
-            with open(os.path.join(root, name), encoding="utf-8",
-                      errors="replace") as fh:
-                for line in fh:
-                    if line.startswith("---") and index.get("__seen__") is None:
-                        continue
-                    if line.startswith("category:"):
-                        category = line.split(":", 1)[1].strip()
-                    elif line.startswith(("key:", "spdx_license_key:")):
-                        ids.append(line.split(":", 1)[1].strip())
-                    elif line.startswith("    - LicenseRef") or line.startswith("    - "):
-                        val = line.strip()[2:].strip()
-                        if val and " " not in val:
-                            ids.append(val)
-                    elif line and not line.startswith((" ", "-")) and ":" not in line:
-                        break               # past the front matter, into the text
-        except OSError:                                  # pragma: no cover
-            continue
-        if category:
-            for i in ids:
-                index.setdefault(i.lower(), category)
-    logger.debug("loaded %d licence categories from ScanCode", len(index))
-    return index
+        keys[key.lower()] = lic.category
+        if lic.spdx_license_key:
+            spdx[lic.spdx_license_key] = lic.category
+    # Older SPDX spellings, only where no licence already owns the id.
+    for lic in _licence_db().values():
+        for alias in lic.other_spdx_license_keys or ():
+            if lic.category:
+                spdx.setdefault(alias, lic.category)
+    return spdx, {s.lower(): c for s, c in spdx.items()}, keys
 
 
 @functools.lru_cache(maxsize=1)
 def _spdx_index() -> dict[str, str]:
     """{ScanCode key: SPDX id} for every licence ScanCode knows."""
-    out: dict[str, str] = {}
-    try:
-        import licensedcode
-        root = os.path.join(os.path.dirname(licensedcode.__file__), "data", "licenses")
-        names = os.listdir(root)
-    except Exception:                                        # pragma: no cover
-        return out
-    for name in names:
-        if not name.endswith(".LICENSE"):
-            continue
-        key = spdx = ""
-        try:
-            with open(os.path.join(root, name), encoding="utf-8", errors="replace") as fh:
-                for line in fh:
-                    if line.startswith("key:"):
-                        key = line.split(":", 1)[1].strip()
-                    elif line.startswith("spdx_license_key:"):
-                        spdx = line.split(":", 1)[1].strip()
-                    elif key and spdx:
-                        break
-        except OSError:                                      # pragma: no cover
-            continue
-        if key and spdx and not spdx.lower().startswith("licenseref-scancode"):
-            out[key.lower()] = spdx
-    return out
+    return {key.lower(): lic.spdx_license_key
+            for key, lic in _licence_db().items()
+            if lic.spdx_license_key
+            and not lic.spdx_license_key.lower().startswith("licenseref-scancode")}
 
 
 def to_spdx(expression: str) -> str:
@@ -142,10 +116,11 @@ def to_spdx(expression: str) -> str:
 
 def category_of(spdx_id: str) -> str:
     """ScanCode's category for a licence id, or "" if it knows none."""
-    idx = _category_index()
-    low = spdx_id.strip().lower()
-    if low in idx:
-        return idx[low]
+    spdx, spdx_lower, keys = _category_index()
+    term = spdx_id.strip()
+    if term in spdx:
+        return spdx[term]
+    low = term.lower()
     # `X WITH Y` is one licence carrying an exception, and only the licence is
     # categorised. Looking the compound up whole found nothing, so MySQL --- a
     # case correct in all three cells --- came back with three review flags
@@ -153,11 +128,14 @@ def category_of(spdx_id: str) -> str:
     # are the one thing that section cannot afford: a caveat on everything is a
     # caveat on nothing.
     if " with " in f" {low} ":
-        return category_of(low.split(" with ", 1)[0])
+        return category_of(re.split(r"\s+with\s+", term, maxsplit=1, flags=re.I)[0])
     # Detections arrive as `LicenseRef-scancode-<key>`; the key is what is indexed.
     if low.startswith("licenseref-scancode-"):
-        return idx.get(low[len("licenseref-scancode-"):], "")
-    return ""
+        return keys.get(low[len("licenseref-scancode-"):], "")
+    # `short_id` leaves the bare ScanCode key, which is the case that collided.
+    if low in keys:
+        return keys[low]
+    return spdx_lower.get(low, "")
 
 
 def _is_uninformative(spdx_id: str) -> bool:
@@ -267,41 +245,22 @@ def _governing_of(node, skip) -> str | None:
 
 
 @functools.lru_cache(maxsize=1)
-def _rule_kinds() -> dict[str, str]:
-    """{rule id: 'text' | 'notice' | 'tag' | 'reference'} from ScanCode's rules."""
-    kinds: dict[str, str] = {}
+def _tag_rules() -> frozenset[str]:
+    """Identifiers of the rules ScanCode marks `is_license_tag`."""
     try:
-        import licensedcode
-        root = os.path.join(os.path.dirname(licensedcode.__file__), "data", "rules")
-        names = os.listdir(root)
+        from licensedcode.cache import get_index
+        return frozenset(r.identifier for r in get_index().rules_by_rid
+                         if r.is_license_tag)
     except Exception:                                        # pragma: no cover
         logger.debug("ScanCode rule metadata unavailable; grant-kind check off")
-        return kinds
-    for name in names:
-        if not name.endswith(".RULE"):
-            continue
-        try:
-            with open(os.path.join(root, name), encoding="utf-8",
-                      errors="replace") as fh:
-                for line in fh:
-                    if line.startswith("is_license_"):
-                        key, _, val = line.partition(":")
-                        if val.strip().lower() in ("yes", "true"):
-                            kinds[name] = key[len("is_license_"):].strip()
-                            break
-                    elif line.startswith("---") and name in kinds:
-                        break
-        except OSError:                                      # pragma: no cover
-            continue
-    logger.debug("loaded %d ScanCode rule kinds", len(kinds))
-    return kinds
+        return frozenset()
 
 
 def _is_grant_rule(rule_identifier: str | None) -> bool:
     """Does this rule match a licence GRANT rather than a parameter naming one?"""
     if not rule_identifier:
         return True                      # unknown provenance: do not exclude
-    return _rule_kinds().get(rule_identifier) != "tag"
+    return rule_identifier not in _tag_rules()
 
 
 

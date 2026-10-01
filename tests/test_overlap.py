@@ -278,6 +278,22 @@ def test_restrictiveness_comes_from_scancode_not_a_local_list():
     assert category_of("BUSL-1.1") == "Source-available"
 
 
+def test_scancode_keys_and_spdx_ids_are_looked_up_separately():
+    """`bsl-1.0` and `BSL-1.0` are two different licences.
+
+    Lowercased into one map, ScanCode's key for the Business Source License 1.0
+    and SPDX's id for Boost collided, and nine licences came out with the wrong
+    category. `short_id` hands back the bare key, so this is the form that
+    reached the ranking.
+    """
+    from receipts.license import category_of
+
+    assert category_of("BSL-1.0") == "Permissive"
+    assert category_of("bsl-1.0") == "Source-available"
+    assert category_of("proprietary-license") == "Commercial"
+    assert category_of("gpl-2.0-plus") == "Copyleft"
+
+
 def _entry(*matches):
     """A ScanCode-shaped file entry from (start_line, score, length, spdx) tuples."""
     return {
