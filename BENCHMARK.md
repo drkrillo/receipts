@@ -23,9 +23,11 @@ Seven sets have been run this way.
 Derivation is reported as a count, not as precision and recall, because it is not
 a classifier. `overlap` intersects git object ids: two repositories share a
 commit or a blob hash or they do not, with no score and no threshold to tune.
-There is also no set of true negatives to measure precision against. The one
-pair declared as an expected negative, nginx → freenginx, turned out to be a
-positive, which is recorded below.
+The negatives that exist are thin: two unrelated-project controls in set #2
+([scripts/run_heldout2.py](scripts/run_heldout2.py), cases N3 and N4), and the
+one pair declared as an expected negative in set #7, nginx → freenginx, which
+turned out to be a positive and is recorded below. Two controls is not a set, so
+no false-positive rate is claimed here.
 
 The numbers for sets #1–#6 predate the changes set #7 caused and have not been
 re-measured against them. They are a record of what was true when they were
